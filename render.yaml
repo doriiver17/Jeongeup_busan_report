@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: jeongeup-busan-report-v2
+    runtime: python
+    plan: free
+    buildCommand: bash build.sh
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.7

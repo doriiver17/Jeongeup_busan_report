@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>결과보고서 작성하기</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <p class="eyebrow">정읍시청 부산 정책 골목 탐방</p>
+    <h1>결과보고서 작성하기</h1>
+    <p>방문지별 인사이트와 활동 사진, 조원 소감을 입력하면 동일한 양식의 PDF가 자동 생성됩니다.</p>
+  </header>
+
+  <div id="mobileNotice" class="browser-notice" hidden>
+    <strong>PDF 저장 안내</strong>
+    <span>카카오톡 내부 브라우저에서 PDF 저장이 제한될 수 있습니다.<br>상단의 사이트 주소를 <b>'복사'</b>해서 Safari 또는 Chrome으로 접속해서 <b>'붙여넣기'</b> 후 이용해주세요.</span>
+  </div>
+
+  <form id="reportForm" action="/generate" method="post" enctype="multipart/form-data">
+    <section class="card blue">
+      <div class="section-title"><span>01</span><h2>조 정보</h2></div>
+      <div class="grid two">
+        <label>조 번호 <em>*</em><input name="group_no" type="number" min="1" step="1" required></label>
+        <label>조 이름 <em>*</em>
+          <input name="group_name" maxlength="{{ limits.group_name }}" required data-count="group-name-count">
+          <small id="group-name-count" class="counter">0/{{ limits.group_name }}</small>
+        </label>
+      </div>
+      <label>조원 이름 <em>*</em><input name="members" maxlength="80" required></label>
+    </section>
+
+    <section class="card purple">
+      <div class="section-title"><span>02</span><h2>탐방 내용 정리</h2></div>
+      <p class="hint"><strong>각 방문지별로 인사이트를 2가지 모두 작성하고, 조원들과 함께 찍은 활동 사진 1장을 첨부해주세요.</strong></p>
+
+      <div class="visit-grid">
+        {% for i in range(1,4) %}
+        <div class="visit-box">
+          <h3>방문지 {{ i }}</h3>
+
+          <label>방문지 <em>*</em>
+            <input name="visit_{{ i }}_place" maxlength="{{ limits.visit_place }}" required data-count="place-{{ i }}-count">
+            <small id="place-{{ i }}-count" class="counter">0/{{ limits.visit_place }}</small>
+          </label>
+
+          <div class="insight-stack">
+            <span class="field-label">인사이트 1 <em>*</em></span>
+            <textarea name="visit_{{ i }}_insight_1" rows="3" maxlength="{{ limits.insight }}" required data-count="insight-{{ i }}-1-count"></textarea>
+            <small id="insight-{{ i }}-1-count" class="counter">0/{{ limits.insight }}</small>
+
+            <span class="field-label second">인사이트 2 <em>*</em></span>
+            <textarea name="visit_{{ i }}_insight_2" rows="3" maxlength="{{ limits.insight }}" required data-count="insight-{{ i }}-2-count"></textarea>
+            <small id="insight-{{ i }}-2-count" class="counter">0/{{ limits.insight }}</small>
+          </div>
+
+          <label>활동 사진 <em>*</em>
+            <input class="photo-input" type="file" name="visit_{{ i }}_photo" accept="image/jpeg,image/png,image/webp" required>
+          </label>
+          <div class="photo-preview" data-preview="{{ i }}"><span>선택한 사진 미리보기</span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card pink">
+      <div class="section-title"><span>03</span><h2>조원 탐방 소감 한 마디</h2></div>
+      <p class="hint">최대 6명까지 작성할 수 있습니다. 작성하는 경우 이름과 소감을 함께 입력해주세요.</p>
+      <div class="member-grid">
+        {% for i in range(1,7) %}
+        <div class="member-box">
+          <label>조원 {{ i }} 이름<input name="member_{{ i }}_name" maxlength="12"></label>
+          <label>한 마디
+            <input name="member_{{ i }}_comment" maxlength="{{ limits.member_comment }}" data-count="comment-{{ i }}-count">
+            <small id="comment-{{ i }}-count" class="counter">0/{{ limits.member_comment }}</small>
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <button id="submitBtn" class="submit" type="submit">PDF 결과보고서 만들기</button>
+    <p id="status" class="status" aria-live="polite"></p>
+  </form>
+</main>
+
+<script>
+const form = document.getElementById('reportForm');
+const button = document.getElementById('submitBtn');
+const status = document.getElementById('status');
+const notice = document.getElementById('mobileNotice');
+
+const ua = navigator.userAgent || '';
+const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isiOS = /iPad|iPhone|iPod/i.test(ua) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if (isMobile && notice) notice.hidden = false;
+
+// Actual site inputs are intentionally blank. Counters only show usable limits.
+document.querySelectorAll('[data-count]').forEach(input => {
+  const counter = document.getElementById(input.dataset.count);
+  const update = () => { counter.textContent = `${input.value.length}/${input.maxLength}`; };
+  input.addEventListener('input', update);
+  update();
+});
+
+document.querySelectorAll('.photo-input').forEach((input, idx) => {
+  input.addEventListener('change', () => {
+    const box = document.querySelector(`[data-preview="${idx + 1}"]`);
+    box.innerHTML = '';
+    const file = input.files && input.files[0];
+    if (!file) {
+      box.innerHTML = '<span>선택한 사진 미리보기</span>';
+      return;
+    }
+    const img = document.createElement('img');
+    img.alt = '활동 사진 미리보기';
+    const url = URL.createObjectURL(file);
+    img.src = url;
+    img.onload = () => URL.revokeObjectURL(url);
+    box.appendChild(img);
+  });
+});
+
+async function compressImage(file) {
+  if (!file || !file.type.startsWith('image/')) return file;
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const maxSide = 1800;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url);
+          if (!blob) return resolve(file);
+          const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
+          resolve(new File([blob], base + '.jpg', { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.84);
+      } catch (_) {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+function buildFilename() {
+  const no = (form.querySelector('[name="group_no"]').value || '').trim();
+  const name = (form.querySelector('[name="group_name"]').value || '').trim()
+    .replace(/[\\/:*?"<>|]/g, '');
+  return `탐방결과보고서_${no}조_${name || '조'}.pdf`;
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!form.reportValidity()) return;
+
+  button.disabled = true;
+  button.textContent = '사진 최적화 및 PDF 만드는 중...';
+  status.textContent = '';
+
+  try {
+    const fd = new FormData(form);
+    for (let i = 1; i <= 3; i++) {
+      const input = form.querySelector(`input[name="visit_${i}_photo"]`);
+      const file = input && input.files && input.files[0];
+      if (file) {
+        const optimized = await compressImage(file);
+        fd.set(`visit_${i}_photo`, optimized, optimized.name);
+      }
+    }
+
+    const response = await fetch(form.action, { method: 'POST', body: fd });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `PDF 생성 중 오류가 발생했습니다. (HTTP ${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    if (isiOS) {
+      const opened = window.open(url, '_blank');
+      if (!opened) window.location.href = url;
+      status.textContent = 'PDF가 열리면 공유 버튼에서 파일에 저장할 수 있습니다.';
+    } else {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = buildFilename();
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      status.textContent = `${buildFilename()} 파일이 저장되었습니다.`;
+    }
+
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    status.textContent = err.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'PDF 결과보고서 만들기';
+  }
+});
+</script>
+</body>
+</html>
