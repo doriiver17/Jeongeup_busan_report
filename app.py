@@ -21,7 +21,7 @@ LIMITS = {
     "group_name": 12,
     "visit_place": 14,
     "insight": 36,
-    "member_comment": 24,
+    "group_comment": 120,
 }
 
 # Precise table geometry measured from the supplied master template.
@@ -29,15 +29,6 @@ VISIT_ROWS = [
     {"idx": 1, "center_y": 453.88, "photo_box": (384.0, 405.2, 164.0, 96.5)},
     {"idx": 2, "center_y": 350.46, "photo_box": (384.0, 301.8, 164.0, 96.5)},
     {"idx": 3, "center_y": 247.16, "photo_box": (384.0, 198.5, 164.0, 96.5)},
-]
-
-COMMENT_SLOTS = [
-    (1, 52.0, 108.0, 235.0),
-    (2, 52.0, 87.0, 235.0),
-    (3, 52.0, 66.0, 235.0),
-    (4, 307.0, 108.0, 235.0),
-    (5, 307.0, 87.0, 235.0),
-    (6, 307.0, 66.0, 235.0),
 ]
 
 
@@ -212,23 +203,36 @@ def draw_photo_contain(c, photo, box_x, box_y, box_w, box_h):
     )
 
 
-def draw_member_comment(c, name, comment, x, center_y, width):
-    name = clean(name, 12)
-    comment = clean(comment, LIMITS["member_comment"])
-    if not name and not comment:
+def draw_group_comment(c, text, x, center_y, max_width, max_height):
+    text = clean(text, LIMITS["group_comment"])
+    if not text:
         return
 
-    prefix = f"• {name}: " if name else "• "
-    size = 7.2
-    minimum = 5.8
-    max_width = width
-    while size > minimum and pdfmetrics.stringWidth(prefix + comment, "Korean", size) > max_width:
+    size = 8.4
+    minimum = 6.6
+    max_lines = 5
+
+    while size >= minimum:
+        lines = wrap_text(text, "Korean", size, max_width)
+        leading = size * 1.35
+        total_h = len(lines) * leading
+        if len(lines) <= max_lines and total_h <= max_height:
+            break
         size -= 0.2
 
+    if size < minimum:
+        size = minimum
+        leading = size * 1.35
+        lines = wrap_text(text, "Korean", size, max_width)[:max_lines]
+        total_h = len(lines) * leading
+
+    # Vertically center the whole comment block inside the single large box.
+    y = center_y + total_h / 2 - size
     c.setFillColor(HexColor("#333333"))
     c.setFont("Korean", size)
-    baseline = vertical_baseline("Korean", size, center_y, 0.7)
-    c.drawString(x, baseline, prefix + comment)
+    for line in lines:
+        c.drawString(x, y, line)
+        y -= leading
 
 
 def build_pdf(data, files):
@@ -265,14 +269,12 @@ def build_pdf(data, files):
         if photo:
             draw_photo_contain(c, photo, px, py, pw, ph)
 
-    # 03. Up to six member comments in two columns. Empty slots stay blank.
-    for idx, x, y, width in COMMENT_SLOTS:
-        draw_member_comment(
-            c,
-            data.get(f"member_{idx}_name"),
-            data.get(f"member_{idx}_comment"),
-            x, y, width,
-        )
+    # 03. One group-level reflection for the whole team.
+    draw_group_comment(
+        c,
+        data.get("group_comment"),
+        48.0, 86.5, 500.0, 56.0,
+    )
 
     c.save()
     out.seek(0)
@@ -308,14 +310,11 @@ def validate(data, files):
         if not photo or not getattr(photo, "filename", ""):
             return f"방문지 {i}의 활동 사진을 첨부해주세요."
 
-    # If a member-comment slot is used, both name and comment must be present.
-    for i in range(1, 7):
-        name = clean(data.get(f"member_{i}_name"), 30)
-        comment = clean(data.get(f"member_{i}_comment"), 100)
-        if bool(name) != bool(comment):
-            return f"조원 {i}의 이름과 소감을 함께 입력해주세요."
-        if len(comment) > LIMITS["member_comment"]:
-            return f"조원 소감은 최대 {LIMITS['member_comment']}자까지 입력할 수 있습니다."
+    group_comment = clean(data.get("group_comment"), 500)
+    if not group_comment:
+        return "조원 탐방 소감 한 마디를 입력해주세요."
+    if len(group_comment) > LIMITS["group_comment"]:
+        return f"조원 탐방 소감 한 마디는 최대 {LIMITS['group_comment']}자까지 입력할 수 있습니다."
 
     return None
 
